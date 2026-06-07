@@ -20,12 +20,12 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.22.0'
           channel: 'stable'
 
       - name: Download Project ZIP
@@ -46,6 +46,16 @@ jobs:
           else
             cp -r project_raw/. project/
           fi
+
+      - name: Fix Package Compatibility
+        working-directory: project
+        run: |
+          # Fix compileSdk issues
+          find . -name "build.gradle" | xargs grep -l "compileSdkVersion flutter.compileSdkVersion" | xargs sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' 2>/dev/null || true
+          find . -name "build.gradle" | xargs grep -l "compileSdk flutter.compileSdkVersion" | xargs sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 34/g' 2>/dev/null || true
+          # Downgrade problematic packages
+          flutter pub add package_info_plus:^5.0.0 --no-example 2>/dev/null || true
+          flutter pub add font_awesome_flutter:^10.6.0 --no-example 2>/dev/null || true
 
       - name: Get Flutter Dependencies
         working-directory: project
