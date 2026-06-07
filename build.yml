@@ -1,0 +1,55 @@
+name: Flutter Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_url:
+        description: 'URL ZIP project Flutter'
+        required: true
+      build_mode:
+        description: 'Build mode (release/debug)'
+        required: true
+        default: 'release'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+
+      - name: Download Project ZIP
+        run: |
+          curl -L "${{ github.event.inputs.zip_url }}" -o project.zip
+          unzip project.zip -d project
+          cd project
+          # Masuk ke folder pertama jika ada subfolder
+          SUBDIR=$(find . -maxdepth 1 -mindepth 1 -type d | head -1)
+          if [ -n "$SUBDIR" ]; then
+            mv "$SUBDIR"/* . 2>/dev/null || true
+          fi
+
+      - name: Get Flutter Dependencies
+        working-directory: project
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: project
+        run: flutter build apk --${{ github.event.inputs.build_mode }} --no-tree-shake-icons
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ github.event.inputs.build_mode }}
+          path: project/build/app/outputs/flutter-apk/app-${{ github.event.inputs.build_mode }}.apk
+          retention-days: 1

@@ -1,0 +1,138 @@
+name: Web2APK Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      web_url:
+        description: 'URL website yang mau dijadikan APK'
+        required: true
+      app_name:
+        description: 'Nama aplikasi'
+        required: true
+      icon_url:
+        description: 'URL icon aplikasi (PNG)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick wget
+
+      - name: Create Flutter WebView Project
+        run: |
+          flutter create --org com.build.app web2apk_project
+          cd web2apk_project
+
+      - name: Download Icon
+        run: |
+          wget -O /tmp/icon.png "${{ github.event.inputs.icon_url }}"
+
+      - name: Setup WebView App
+        run: |
+          cd web2apk_project
+
+          # Update pubspec.yaml
+          cat > pubspec.yaml << EOF
+          name: web2apk_project
+          description: Web2APK App
+          version: 1.0.0+1
+          environment:
+            sdk: '>=3.0.0 <4.0.0'
+          dependencies:
+            flutter:
+              sdk: flutter
+            webview_flutter: ^4.4.2
+          flutter:
+            uses-material-design: true
+            assets:
+              - assets/icon.png
+          EOF
+
+          # Buat folder assets
+          mkdir -p assets
+          cp /tmp/icon.png assets/icon.png
+
+          # Buat main.dart
+          cat > lib/main.dart << 'EOF'
+          import 'package:flutter/material.dart';
+          import 'package:webview_flutter/webview_flutter.dart';
+
+          void main() {
+            runApp(const MyApp());
+          }
+
+          class MyApp extends StatelessWidget {
+            const MyApp({super.key});
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: '${{ github.event.inputs.app_name }}',
+                debugShowCheckedModeBanner: false,
+                home: const WebViewPage(),
+              );
+            }
+          }
+
+          class WebViewPage extends StatefulWidget {
+            const WebViewPage({super.key});
+            @override
+            State<WebViewPage> createState() => _WebViewPageState();
+          }
+
+          class _WebViewPageState extends State<WebViewPage> {
+            late final WebViewController _controller;
+
+            @override
+            void initState() {
+              super.initState();
+              _controller = WebViewController()
+                ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                ..loadRequest(Uri.parse('${{ github.event.inputs.web_url }}'));
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: SafeArea(
+                  child: WebViewWidget(controller: _controller),
+                ),
+              );
+            }
+          }
+          EOF
+
+      - name: Get Dependencies
+        working-directory: web2apk_project
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: web2apk_project
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Rename APK
+        run: |
+          mv web2apk_project/build/app/outputs/flutter-apk/app-release.apk "${{ github.event.inputs.app_name }}.apk"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.app_name }}
+          path: "${{ github.event.inputs.app_name }}.apk"
+          retention-days: 1
