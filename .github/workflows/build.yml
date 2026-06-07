@@ -25,7 +25,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.24.0'
           channel: 'stable'
 
       - name: Download Project ZIP
@@ -51,11 +51,12 @@ jobs:
         working-directory: project
         run: |
           # Fix compileSdk issues
-          find . -name "build.gradle" | xargs grep -l "compileSdkVersion flutter.compileSdkVersion" | xargs sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' 2>/dev/null || true
-          find . -name "build.gradle" | xargs grep -l "compileSdk flutter.compileSdkVersion" | xargs sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 34/g' 2>/dev/null || true
-          # Downgrade problematic packages
-          flutter pub add package_info_plus:^5.0.0 --no-example 2>/dev/null || true
-          flutter pub add font_awesome_flutter:^10.6.0 --no-example 2>/dev/null || true
+          find . -name "build.gradle" | xargs grep -l "compileSdkVersion flutter.compileSdkVersion" 2>/dev/null | xargs sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' 2>/dev/null || true
+          find . -name "build.gradle" | xargs grep -l "compileSdk flutter.compileSdkVersion" 2>/dev/null | xargs sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 34/g' 2>/dev/null || true
+          # Fix flutter_lints version
+          sed -i 's/flutter_lints: \^[0-9.]*/flutter_lints: ^5.0.0/g' pubspec.yaml || true
+          # Fix font_awesome_flutter version
+          sed -i 's/font_awesome_flutter: \^10\.[0-9.]*/font_awesome_flutter: ^10.6.0/g' pubspec.yaml || true
 
       - name: Get Flutter Dependencies
         working-directory: project
