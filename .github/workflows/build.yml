@@ -30,13 +30,21 @@ jobs:
 
       - name: Download Project ZIP
         run: |
-          curl -L "${{ github.event.inputs.zip_url }}" -o project.zip
-          unzip project.zip -d project
-          cd project
-          # Masuk ke folder pertama jika ada subfolder
-          SUBDIR=$(find . -maxdepth 1 -mindepth 1 -type d | head -1)
-          if [ -n "$SUBDIR" ]; then
-            mv "$SUBDIR"/* . 2>/dev/null || true
+          curl -L \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/octet-stream" \
+            --max-time 300 \
+            --retry 3 \
+            "${{ github.event.inputs.zip_url }}" \
+            -o project.zip
+          unzip -o project.zip -d project_raw
+          mkdir -p project
+          PUBSPEC=$(find project_raw -name "pubspec.yaml" | head -1)
+          if [ -n "$PUBSPEC" ]; then
+            PROJECT_DIR=$(dirname "$PUBSPEC")
+            cp -r "$PROJECT_DIR"/. project/
+          else
+            cp -r project_raw/. project/
           fi
 
       - name: Get Flutter Dependencies
