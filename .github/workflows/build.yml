@@ -1,19 +1,26 @@
-name: Flutter Build
+name: Build Flutter APK
 
 on:
   workflow_dispatch:
     inputs:
       zip_url:
-        description: 'URL ZIP project Flutter'
+        description: 'URL file ZIP project Flutter'
         required: true
-      build_mode:
-        description: 'Build mode (release/debug)'
+      chat_id:
+        description: 'Telegram chat ID'
         required: true
-        default: 'release'
+      user_id:
+        description: 'Telegram user ID'
+        required: true
+      mode:
+        description: 'Build mode'
+        required: false
+        default: 'ZIP_UPLOAD'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Setup Java
@@ -25,50 +32,29 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.19.0'
           channel: 'stable'
 
-      - name: Download Project ZIP
+      - name: Download ZIP project
         run: |
-          curl -L \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/octet-stream" \
-            --max-time 300 \
-            --retry 3 \
-            "${{ github.event.inputs.zip_url }}" \
-            -o project.zip
-          unzip -o project.zip -d project_raw
-          mkdir -p project
-          PUBSPEC=$(find project_raw -name "pubspec.yaml" | head -1)
-          if [ -n "$PUBSPEC" ]; then
-            PROJECT_DIR=$(dirname "$PUBSPEC")
-            cp -r "$PROJECT_DIR"/. project/
-          else
-            cp -r project_raw/. project/
-          fi
+          curl -L "${{ github.event.inputs.zip_url }}" -o project.zip
+          unzip project.zip -d project_extracted
+          PROJECT_DIR=$(find project_extracted -name "pubspec.yaml" -maxdepth 3 | head -1 | xargs dirname)
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
 
-      - name: Fix Package Compatibility
-        working-directory: project
+      - name: Get Flutter dependencies
         run: |
-          # Fix compileSdk issues
-          find . -name "build.gradle" | xargs grep -l "compileSdkVersion flutter.compileSdkVersion" 2>/dev/null | xargs sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' 2>/dev/null || true
-          find . -name "build.gradle" | xargs grep -l "compileSdk flutter.compileSdkVersion" 2>/dev/null | xargs sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 34/g' 2>/dev/null || true
-          # Fix flutter_lints version
-          sed -i 's/flutter_lints: \^[0-9.]*/flutter_lints: ^5.0.0/g' pubspec.yaml || true
-          # Fix font_awesome_flutter version
-          sed -i 's/font_awesome_flutter: \^10\.[0-9.]*/font_awesome_flutter: ^10.6.0/g' pubspec.yaml || true
-
-      - name: Get Flutter Dependencies
-        working-directory: project
-        run: flutter pub get
+          cd ${{ env.PROJECT_DIR }}
+          flutter pub get
 
       - name: Build APK
-        working-directory: project
-        run: flutter build apk --${{ github.event.inputs.build_mode }} --no-tree-shake-icons
+        run: |
+          cd ${{ env.PROJECT_DIR }}
+          flutter build apk --release --no-tree-shake-icons
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: app-${{ github.event.inputs.build_mode }}
-          path: project/build/app/outputs/flutter-apk/app-${{ github.event.inputs.build_mode }}.apk
-          retention-days: 1
+          name: release-apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 3
